@@ -42,8 +42,15 @@ def _load_network():
     in_dim = 18
     out_dim = len(ACTIONS)
 
+    submission_dir = os.path.dirname(__file__)
+    pth_path = os.path.join(submission_dir, WEIGHT_FILE)
+
+    state_dict = torch.load(pth_path, map_location=torch.device("cpu"))
+
     if ALGO in ["TD3", "SAC"]:
         _NET = ReLUPolicyNetwork(in_dim, out_dim)
+        _NET.load_state_dict(state_dict)
+
     elif ALGO == "PPO":
         _NET = nn.Sequential(
             nn.Linear(in_dim, 64),
@@ -52,13 +59,20 @@ def _load_network():
             nn.Tanh(),
             nn.Linear(64, out_dim),
         )
+        if any(k.startswith("actor.") for k in state_dict):
+            prefix = "actor."
+        elif any(k.startswith("actor_mean.") for k in state_dict):
+            prefix = "actor_mean."
+        else:
+            raise ValueError("No actor weights found in PPO checkpoint!")
+        actor_state_dict = {
+            k.replace(prefix, ""): v for k, v in state_dict.items() if k.startswith(prefix)
+        }
+        _NET.load_state_dict(actor_state_dict)
+
     else:
         raise ValueError(f"Unknown algorithm: {ALGO}")
 
-    submission_dir = os.path.dirname(__file__)
-    pth_path = os.path.join(submission_dir, WEIGHT_FILE)
-
-    _NET.load_state_dict(torch.load(pth_path, map_location=torch.device("cpu")))
     _NET.eval()
 
 
